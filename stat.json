@@ -1,7 +1,9 @@
 {
 	"host":"127.0.0.1",
 	"port":8080,
-	"name":"Peer1",
+	"statushost":"127.0.0.1",
+	"statusport":8088,
+	"synctime":1,
 	"peerlist":[
 		"127.0.0.1:8081"
 	]

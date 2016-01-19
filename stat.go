@@ -27,13 +27,14 @@ func main() {
 	CONFIGS.Name = fmt.Sprintf("%s:%d",CONFIGS.Host,CONFIGS.Port)
 	StartService()
 	for {
-		DumpClientStatus()
-		time.Sleep(10 * time.Second)
+		time.Sleep(1 * time.Second)
 	}
 }
 
 func StartService() {
 	go HeartBeatInit()
 	go Server.Listen(CONFIGS.Host,CONFIGS.Port)
+	go Server.SendPeerStatus()
+	go WebServer()
 }
 

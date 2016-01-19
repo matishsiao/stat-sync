@@ -16,8 +16,6 @@ type PeerClient struct {
 	RecvBuf	bytes.Buffer
 	Signal chan *PeerMessage
 	Outgoing chan PeerMessage
-	HB HeartBeatStatus
-	PS PeersStatus
 }
 
 func (p *PeerClient) Init(signal chan *PeerMessage,addr string) {
@@ -33,12 +31,12 @@ func (p *PeerClient) Init(signal chan *PeerMessage,addr string) {
 func (p *PeerClient) RetryConnect(addr string) *net.TCPConn {
 	for {
 		log.Println("Retry Connect to ",addr)
-		ClientPeerStatusList[addr].Status = false
-		ClientPeerStatusList[addr].ReportTime = time.Now().Unix()
+		PeerStatusList[addr].Status = false
+		PeerStatusList[addr].ReportTime = time.Now().Unix()
 		conn := p.connect(addr)
 		if conn != nil {
 			p.Conn = conn
-			ClientPeerStatusList[addr].Status = true
+			PeerStatusList[addr].Status = true
 			return p.Conn
 		}
 		time.Sleep(10 * time.Second)
@@ -91,9 +89,10 @@ func (p *PeerClient) write(data []byte) error {
 		_, err := p.Conn.Write(data)
 		if err != nil {
 			log.Printf("Peer Client Send Error:%v RemoteAddr:%s\n", err, p.Addr)
+			p.Status = false
 			p.Conn.Close()
 			go p.RetryConnect(p.Addr)
-			p.Status = false
+			
 		}
 		return err
 	} else {
@@ -103,16 +102,24 @@ func (p *PeerClient) write(data []byte) error {
 }
 
 func (p *PeerClient) HeartBeat(id string) {
-	var msg PeerMessage
-	msg.MessageTime = time.Now().Unix()
-	msg.Type = MESSAGE_TYPE_HEARTBEAT
-	json,err := json.Marshal(HeartBeatStatus{PeerId:id,Status:true})
-	if err != nil {
-		return
+	//log.Println("HeartBeat:",id,p.Addr,p.Status)
+	if p.Status {
+		var msg PeerMessage
+		msg.Sender = CONFIGS.Name+"-Client"
+		msg.MessageTime = time.Now().Unix()
+		msg.Type = MESSAGE_TYPE_HEARTBEAT
+		json,err := json.Marshal(HeartBeatStatus{PeerId:id,Status:true})
+		if err != nil {
+			return
+		}
+		msg.Message = string(json)
+		p.Write(msg)
+	} else {
+		if v,ok := PeerStatusList[p.Addr]; ok {
+			v.Status = false
+			v.ReportTime = time.Now().Unix()
+		}
 	}
-	msg.Message = string(json)
-	log.Println("HeartBeat:",msg)
-	p.Write(msg)
 }
 
 
@@ -122,21 +129,22 @@ func (p *PeerClient) Read() {
 		if msg != nil && err == nil {
 			switch msg.Type {
 				case MESSAGE_TYPE_PEER_STATUS:
-					var ps PeersStatus
+					/*var ps PeersStatus
 					err := json.Unmarshal([]byte(msg.Message),&ps)
 					if err != nil {
 						//nothing need to do
 						continue
 					}
 					p.PS = ps
+					log.Println("Client:",p.PS)*/
 				case MESSAGE_TYPE_HEARTBEAT:
-					var hb HeartBeatStatus
+					/*var hb HeartBeatStatus
 					err := json.Unmarshal([]byte(msg.Message),&hb)
 					if err != nil {
 						//nothing need to do
 						continue
 					}
-					p.HB = hb
+					p.HB = hb*/
 				default:
 					continue	
 			}
@@ -154,6 +162,7 @@ func (p *PeerClient) read() (*PeerMessage, error) {
 	for {
 		resp := p.Parse()
 		if resp != nil {
+			p.RecvBuf.Reset()
 			return resp, nil
 		}
 		n, err := p.Conn.Read(tmp)

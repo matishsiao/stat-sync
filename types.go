@@ -6,6 +6,7 @@ const MESSAGE_TYPE_PEER_STATUS = 1
 const MESSAGE_TYPE_HEARTBEAT = 2
 
 type PeerMessage struct {
+	Sender string `json:"sender"`
 	MessageTime int64 `json:"time"`
 	Type int `json:"type"`
 	Message string `json:"message"`
@@ -32,6 +33,9 @@ type Configs struct {
 	Host string `json:"host"`
 	Port int `json:"port"`
 	Name string	`json:"name"`
+	SyncTime int `json:"synctime"`
+	StatusHost string `json:"statushost"`
+	StatusPort int `json:"statusport"`
 	PeerList []string `json:"peerlist"`
 }
 

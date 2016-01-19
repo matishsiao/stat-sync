@@ -5,6 +5,8 @@ import (
 	"log"
 	"fmt"
 	"os"
+	"time"
+	"encoding/json"
 )
 
 
@@ -36,7 +38,10 @@ func (p *PeerServer) Listen(ip string,port int) {
 
 func (p *PeerServer) ProcessSignal() {
 	for signal := range p.Signal {
-		log.Println("ProcessSignal Signal:",signal)
+		if signal.Type == 100 {
+			log.Println("ProcessSignal Signal:",signal)
+		}
+		//log.Println("ProcessSignal Signal:",signal)
 	}
 }
 
@@ -52,13 +57,27 @@ func (p *PeerServer) HeartBeatCheck() {
 	}
 }
 
-func (p *PeerServer) Broadcast() {
-	/*_, err := cl.Conn.Write(tmpBuf)
-	if err != nil {
-		cl.Close()
+func (p *PeerServer) SendPeerStatus() {
+	for {
+		p.sendPeerStatus()
+		time.Sleep(10 * time.Second)
 	}
-	for k,v := range p.PeersList {
-		
-	}*/
+}
+
+func (p *PeerServer) sendPeerStatus() {
+	if len(PeerStatusList) > 0 {
+		var msg PeerMessage
+		msg.Sender = CONFIGS.Name
+		msg.MessageTime = time.Now().Unix()
+		msg.Type = MESSAGE_TYPE_PEER_STATUS
+		json,err := json.Marshal(PeerStatusList)
+		if err != nil {
+			return
+		}
+		msg.Message = string(json)
+		for _,v := range p.PeersList {
+			go v.Write(msg)
+		}
+	}
 }
 

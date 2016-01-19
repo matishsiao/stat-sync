@@ -14,8 +14,6 @@ type PeerConnection struct {
 	RecvBuf	bytes.Buffer
 	Signal chan *PeerMessage
 	Outgoing chan PeerMessage
-	HB HeartBeatStatus
-	PS PeersStatus
 }
 
 func (p *PeerConnection) Init(signal chan *PeerMessage,conn *net.TCPConn) {
@@ -29,26 +27,39 @@ func (p *PeerConnection) Init(signal chan *PeerMessage,conn *net.TCPConn) {
 }
 
 func (p *PeerConnection) Write(data PeerMessage) {
-	 p.Outgoing <- data
+	if p.Status {
+		 p.Outgoing <- data
+	}
+}
+
+func (p *PeerConnection) Close() {
+	p.Status = false
+	p.Conn.Close()
+	log.Println("Close Connection:",p.Addr)
 }
 
 func (p *PeerConnection) ProcessWrite() {
 	for v := range p.Outgoing {
+		
 		data,err := json.Marshal(v)
 		if err != nil {
 			log.Println("HeartBeat JSON Error:",err)
 			continue
 		}
-		p.write(data)
+		
+		err = p.write(data)
+		if err != nil {
+			break
+		}
 	}
+	p.Close()
 }
 
 func (p *PeerConnection) write(data []byte) error {
 	_, err := p.Conn.Write(data)
 	if err != nil {
-		log.Printf("Srv Client Send Error:%v RemoteAddr:%s\n", err, p.Addr)
-		p.Conn.Close()
-		p.Status = false
+		log.Printf("Srv Client Send Error:%v RemoteAddr:%s data:%s\n", err, p.Addr,string(data))
+		
 	}
 	return err
 }
@@ -68,30 +79,34 @@ func (p *PeerConnection) HeartBeat(id string) {
 
 func (p *PeerConnection) Read() {
 	for {
-		msg,err := p.read()
-		if msg != nil && err == nil {
-			switch msg.Type {
-				case MESSAGE_TYPE_PEER_STATUS:
-					var ps PeersStatus
-					err := json.Unmarshal([]byte(msg.Message),&ps)
-					if err != nil {
-						//nothing need to do
-						continue
-					}
-					p.PS = ps
-				case MESSAGE_TYPE_HEARTBEAT:
-					var hb HeartBeatStatus
-					err := json.Unmarshal([]byte(msg.Message),&hb)
-					if err != nil {
-						//nothing need to do
-						continue
-					}
-					p.HB = hb
-				default:
-					continue	
+		if p.Status {
+			msg,err := p.read()
+			if msg != nil && err == nil {
+				switch msg.Type {
+					case MESSAGE_TYPE_HEARTBEAT:
+						var hb HeartBeatStatus
+						err := json.Unmarshal([]byte(msg.Message),&hb)
+						if err != nil {
+							//nothing need to do
+							continue
+						}
+						if v,ok := PeerStatusList[hb.PeerId];!ok {
+							NewPeer(hb.PeerId)
+							//PeerStatusList[hb.PeerId] = &PeerStatus{PeerId:hb.PeerId,Status:hb.Status,ReportTime:msg.MessageTime}
+						} else {
+							v.Status = hb.Status
+							v.ReportTime = msg.MessageTime
+						}
+					default:
+						continue	
+				}
+				go p.SendSignal(msg)
+			} else if err != nil {
+				p.Close()
 			}
-			go p.SendSignal(msg)
-		}
+		} else {
+			break
+		}	
 	}
 }
 
